@@ -1,6 +1,7 @@
 const bcryptjs = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const router = require("express").Router();
+const restrictAccess = require("../middleware/restricted-access-middleware");
 const {
   find,
   findBy,
@@ -12,9 +13,10 @@ const {
 
 router.get(
   "/",
-  /*middleware,*/
+  restrictAccess,
   async (req, res, next) => {
     try {
+      console.log(process.env.JWT_SECRET);
       const users = await find();
       res.status(200).json(users);
     } catch (err) {
@@ -51,44 +53,77 @@ router.post("/register", async (req, res, next) => {
   }
 });
 
-router.post("/login", async (req, res, next) => {
+router.post("/login", (req, res, next) => {
   const {
     username,
     password
   } = req.body;
-  try {
-    if (req.body) {
-      const [user] = await findBy({
+
+  if (req.body) {
+    findBy({
         username: username
-      });
-      if (user && bcryptjs.compareSync(password, user.password)) {
-        const token = generateToken(user);
-        res.status(200).json({
-          message: "Hi, have a token",
-          token: token
-        });
-      } else {
-        res.status(401).json({
-          message: "invalid credentials"
+      })
+      .then(([user]) => {
+        if (user && bcryptjs.compareSync(password, user.password)) {
+          const token = generateToken(user);
+          res.status(200).json({
+            message: "Hi, have a token",
+            token: token
+          });
+        } else {
+          res.status(401).json({
+            message: "invalid credentials"
+          })
+        }
+      }).catch(err => {
+        res.status(500).json({
+          err: err.message,
+          message: "There was a server error fulfilling your request"
         })
-      }
-    }
-  } catch (err) {
-    res.status(500).json({
-      error: err.message,
-      message: "There was a server error fulfilling your request"
-    })
-  };
-})
+      })
+  } else {
+    res.status(400).json({
+      message: "please provide username and password and the password should be alphanumeric"
+    });
+  }
+});
+
+//     if (req.body) {
+//       // const [user] = await findBy({
+//         username: username
+//       })
+//       .then(([user]) => {
+//         if (user && bcryptjs.compareSync(password, user.password)) {
+//           const token = generateToken(user);
+//           res.status(200).json({
+//             message: "Hi, have a token",
+//             token: token
+//           });
+//         } else {
+//           res.status(401).json({
+//             message: "invalid credentials"
+//           })
+//         }
+//       })
+//       .catch (err) {
+//         res.status(500).json({
+//           error: err.message,
+//           message: "There was a server error fulfilling your request"
+//         })
+//       }
+//     } else {}
+//   }
+// })
 
 const generateToken = (user) => {
   const payload = {
-    subject: user.id,
+    // subject: user.id,
     username: user.username,
+    password: user.password,
     department: user.department,
   };
 
-  const secret = "secret thing";
+  const secret = process.env.JWT_SECRET || "secret";
 
   const options = {
     expiresIn: "1d",
